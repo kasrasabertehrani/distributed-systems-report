@@ -4,26 +4,29 @@
 \usepackage{url}
 \usepackage{natbib}
 \usepackage{graphicx}
-\usepackage{cleveref} % this must be the last package to be loaded
+\usepackage{listings}
+\usepackage{xcolor}
+\usepackage{amsmath}
+\usepackage{cleveref}
+
+\lstset{
+  basicstyle=\ttfamily\small,
+  breaklines=true,
+  showstringspaces=false,
+  commentstyle=\color{gray},
+  keywordstyle=\color{blue},
+  stringstyle=\color{red},
+  backgroundcolor=\color{white}
+}
 
 \newcommand{\emailaddr}[1]{\href{mailto:#1}{\texttt{#1}}}
 
-\title{\LARGE
-    Final Report Template\\
-    (replace with your project name)
-}
-\subtitle{Final Report for the Distributed Systems Course [Your academic year here]}
-
-% Consider watching:
-% https://www.youtube.com/watch?v=ihxSUsJB_14
-% https://www.youtube.com/watch?v=XTFWaV55uDo
+\title{\LARGE Mancala Game}
+\subtitle{Final Report for the Distributed Systems Course 2024/2025}
 
 \author{
-    Author 1 \\ \emailaddr{author1@email.it}
-    \and
-    Author 2 \\ \emailaddr{author2@gmail.com}
-    \and
-    Author 3 \\ \emailaddr{author3@unibo.it}
+  Kasra Sabertehrani \\ \emailaddr{kasra.sabertehrani@studio.unibo.it} \\
+    Parisa Sokuti \\ \emailaddr{parisa.sokuti@studio.unibo.it}
 }
 
 \date{\today}
@@ -33,558 +36,1222 @@
 \maketitle
 
 \begin{abstract}
-    Up to $\sim$2000 characters briefly describing the project.
+This report presents the design and implementation of a distributed Mancala game system built using Spring Boot and WebSockets.
+The system enables two players to play the classic Mancala board game over a network in real-time.
+The primary focus is on handling distributed challenges such as player disconnection, session management, inactivity detection,
+and state consistency across multiple clients.
+The implementation demonstrates core distributed systems concepts including asynchronous communication,
+fault tolerance, and timeout mechanisms.
+The game is implemented with a clean separation between domain logic (game rules), service layer (business logic),
+and presentation layer (WebSocket controllers).
+Key features include automatic room creation, player joining, real-time game state synchronization,
+graceful disconnection handling with reconnection support, and inactivity-based player forfeit mechanisms.
 \end{abstract}
 
-\section*{Disclaimer (if needed)}
+\section*{Disclaimer}
 
-During the preparation of this work, the author(s) used [NAME TOOL / SERVICE] to [REASON].
-
-After using this tool/service, 
-the author(s) reviewed and edited the content as needed 
-and take(s) full responsibility for the content of the final report/artifact.
-
-\section*{Quick \LaTeX{} suggestions}
-
-If you need to cite a reference, you can use the \texttt{cite} command, 
-like providing the BibTex key of some entry in the \texttt{references.bib} file, 
-e.g.: \cite{adams1995hitchhiker}.
-
-You can find pre-coocked BibTex entries for most Computer Science papers on \href{https://dblp.uni-trier.de/}{DBLP}.
-
-If you need to include an image,
-let \LaTeX{} decide where to put it by using the \texttt{figure} environment,
-with a \texttt{includegraphics} command inside it.
-%
-If your need to reference a figure,
-use the \texttt{label} command to assign a label to the figure,
-and then use the \texttt{cref} command to reference it.
-%
-Put figures in the \texttt{figures} folder.
-%
-A complete example is shown in \cref{fig:universe}.
-
-\begin{figure}
-    \centering
-    \includegraphics[width=0.5\textwidth]{figures/universe.jpg}
-    \caption{This is an example image}
-    \label{fig:universe}
-\end{figure}
-
-Do \textbf{not} put any placement constraint on figures,
-such as \texttt{[h]} or \texttt{[h!]}.
-%
-Same considerations apply for other floating elements 
-(e.g. tables, algorithms, listings, etc.).
-
-Do \textbf{not} use the \texttt{\textbackslash\textbackslash} or \texttt{\textbackslash newline} commands to break lines.
-
-Just leave an empty line between two paragraphs to start a new one.
-%
-The new line will be automatically indented.
-%
-This is intended: it is the \LaTeX{} way to separate capoverses.
+During the preparation of this work, the author(s) used GitHub Copilot to assist with code generation and review.
+After using this tool, the author(s) reviewed and edited the content as needed and take(s) full responsibility for the content of the final report/artifact.
 
 \section{Concept}\label{concept}
 
-Here you should explain:
+\subsection{Product Type}
+
+This project is a \textbf{web-based, real-time multiplayer game application} combining:
+\begin{itemize}
+  \item \textbf{Backend}: RESTful API with WebSocket support for real-time communication
+  \item \textbf{Frontend}: HTML/CSS/JavaScript web interface for player interaction
+  \item \textbf{Game Engine}: Java-based Mancala game logic implementation
+\end{itemize}
+
+
+\subsection{Why is distribution needed?}
+
+Distribution is essential for this project for the following reasons:
 
 \begin{itemize}
-  \item The type of product developed with that project, for example (non-exhaustive):
-  %
-  \begin{itemize}
-    \item Application (with GUI, be it mobile, web, or desktop)
-    \item Command-line application (CLI could be used by humans or scripts)
-    \item Library
-    \item Web-service(s)
-  \end{itemize}
-
-  \item Use case description:
-  %
-  \begin{itemize}
-    \item \emph{what} is the software doing?
-    \item \emph{where} are the users?
-    \item \emph{when} and \emph{how frequently} do they interact with the system?
-    \item \emph{how} do they \emph{interact} with the system? which \emph{devices} are they using?
-    \item does the system need to \emph{store} user's \textbf{data}? \emph{which}? \emph{where}?
-    \item most likely, there will be \emph{multiple} \textbf{roles}
-  \end{itemize}
-
-  \item Why is distribution needed?
-  %
-  \begin{itemize}
-    \item geographically distributed environments?
-    \item computation speedup?
-    \item resource sharing?
-    \item fault tolerance?
-    \item other reasons?
-  \end{itemize}
-  %
-  In any case, please elaborate.
+  \item \textbf{Geographical separation}: Players must be able to play from different locations across a network
+  \item \textbf{Real-time synchronization}: Game state must be consistent across multiple clients;
+    any move by one player must be immediately visible to the other
+  \item \textbf{Fault tolerance requirement}: Network failures are inevitable;
+    the system must handle player disconnections gracefully and allow reconnection without losing game state
+  \item \textbf{Concurrent interactions}: Multiple games must be able to run simultaneously on the same server,
+    requiring proper concurrency control
+  \item \textbf{Scalability consideration}: Although not a focus of this project,
+    the distributed design allows multiple game instances to be load-balanced across servers
 \end{itemize}
+
 
 \section{Requirements Elicitation and Analysis}\label{requirements}
 
+\subsection{Functional Requirements}
+
+\begin{enumerate}
+  \item \textbf{FR1: Game Room Management}
+  \begin{itemize}
+    \item The system must allow a player to create a new game room
+    \item \textbf{Acceptance Criterion}: A player can create a room, receive a unique room ID,
+      and join as Player 1
+  \end{itemize}
+
+  \item \textbf{FR2: Player Joining}
+  \begin{itemize}
+    \item A second player must be able to join an existing room using its ID
+    \item \textbf{Acceptance Criterion}: Player 2 can join a room with Player 1,
+      and the game automatically starts
+  \end{itemize}
+
+  \item \textbf{FR3: Game Rule Enforcement}
+  \begin{itemize}
+    \item The system must enforce all Mancala game rules including stone sowing, capturing,
+      and turn management
+    \item \textbf{Acceptance Criterion}: Moves are validated; invalid moves are rejected;
+      game logic is correctly executed
+  \end{itemize}
+
+  \item \textbf{FR4: Turn-based Gameplay}
+  \begin{itemize}
+    \item The system must enforce strict turn-based gameplay where only the current player
+      can make a move
+    \item \textbf{Acceptance Criterion}: Non-active players cannot make moves;
+      turns automatically switch after valid moves
+  \end{itemize}
+
+  \item \textbf{FR5: Winner Determination}
+  \begin{itemize}
+    \item The system must determine the winner when the game ends naturally or by forfeit
+    \item \textbf{Acceptance Criterion}: Winner is correctly calculated based on scores or disconnect status
+  \end{itemize}
+
+  \item \textbf{FR6: Real-time State Synchronization}
+  \begin{itemize}
+    \item All game state changes must be immediately broadcast to both players
+    \item \textbf{Acceptance Criterion}: Both players see the same game state at all times;
+      updates arrive within 100ms
+  \end{itemize}
+
+  \item \textbf{FR7: Disconnection Handling}
+  \begin{itemize}
+    \item When a player disconnects, the game should pause and allow reconnection within a grace period
+    \item \textbf{Acceptance Criterion}: Disconnected player can rejoin;
+      game resumes from disconnection point
+  \end{itemize}
+
+  \item \textbf{FR8: Inactivity Detection}
+  \begin{itemize}
+    \item If a player is inactive for a specified timeout, the opponent automatically wins
+    \item \textbf{Acceptance Criterion}: Inactive player is declared forfeit after timeout
+  \end{itemize}
+
+  \item \textbf{FR9: Room Cleanup}
+  \begin{itemize}
+    \item When a game ends (naturally or by timeout), the room and its resources must be cleaned up
+    \item \textbf{Acceptance Criterion}: Room is removed from active rooms;
+      no resource leaks occur
+  \end{itemize}
+
+  \item \textbf{FR10: Error Handling}
+  \begin{itemize}
+    \item Invalid operations must return meaningful error messages to the client
+    \item \textbf{Acceptance Criterion}: Clients receive error messages describing why operations failed
+  \end{itemize}
+\end{enumerate}
+
+\subsection{Non-functional Requirements}
+
+\begin{enumerate}
+  \item \textbf{NFR1: Consistency}
+  \begin{itemize}
+    \item Game state must be consistent across all clients at all times
+    \item Target: Eventual consistency achieved within 100ms
+  \end{itemize}
+
+  \item \textbf{NFR2: Availability}
+  \begin{itemize}
+    \item The system should remain available even if one player temporarily disconnects
+    \item Target: 99\% availability during active games (excluding network failures)
+  \end{itemize}
+
+
+  \item \textbf{NFR3: Fault Tolerance}
+  \begin{itemize}
+    \item The system must gracefully handle network failures and player disconnections
+    \item Target: Detect disconnection within 30 seconds; allow reconnection within 5 minutes
+  \end{itemize}
+
+\end{enumerate}
+
+\subsection{Implementation Requirements}
+
+\begin{enumerate}
+  \item \textbf{IR1: Programming Language}: Java 17
+  \begin{itemize}
+    \item \textbf{Justification}: Requirement of Spring Boot framework;
+      strong typing and mature ecosystem for distributed systems
+  \end{itemize}
+
+  \item \textbf{IR2: Backend Framework}: Spring Boot 4.0.3
+  \begin{itemize}
+    \item \textbf{Justification}: Provides built-in WebSocket support,
+      dependency injection, and scheduling capabilities
+  \end{itemize}
+
+  \item \textbf{IR3: Real-time Communication}: WebSocket (STOMP protocol)
+  \begin{itemize}
+    \item \textbf{Justification}: Enables low-latency, bidirectional communication;
+      essential for real-time game synchronization
+  \end{itemize}
+
+  \item \textbf{IR4: Frontend}: HTML5, CSS3, JavaScript (Vanilla)
+  \begin{itemize}
+    \item \textbf{Justification}: No external framework required for this simple use case;
+      reduces dependencies
+  \end{itemize}
+
+  \item \textbf{IR5: Build Tool}: Maven
+  \begin{itemize}
+    \item \textbf{Justification}: Provided with Spring Boot; standard for Java projects
+  \end{itemize}
+\end{enumerate}
+
+\subsection{Glossary of Domain Terms}
+
 \begin{itemize}
-  \item The requirements must explain \textbf{what} (not how) the software
-  being produced should do.
-  %
-  \begin{itemize}
-    \item you should not focus on the particular problems, but exclusively on
-    what you want the application to do.
-  \end{itemize}
-
-  \item Requirements must be clearly identified, and possibly numbered
-
-  \item Requirements are divided into:
-  %
-  \begin{itemize}
-    \item \textbf{Functional}: some functionality the software should provide to the user
-
-    \item \textbf{Non-functional}: requirements that do not directly concern behavioural aspects, such as consistency, availability, etc.
-
-    \item \textbf{Implementation}: constrain the entire phase of system realization, 
-    for instance by requiring the use of a specific programming language and/or a specific software tool
-    %
-    \begin{itemize}
-      \item these constraints should be adequately justified by political / economic / administrative reasons\ldots{}
-      \item \ldots{} otherwise, implementation choices should emerge \emph{as  a consequence of} design
-    \end{itemize}
-  \end{itemize}
-
-  \item If there are domain-specific terms, these should be explained in a glossary
-  
-  \item Each requirement must have its own \textbf{acceptance criterion}
-  %
-  \begin{itemize}
-    \item these will be important for the validation phase
-  \end{itemize}
+  \item \textbf{Pit}: A small cup on the Mancala board containing stones
+  \item \textbf{Store}: A larger pit at the end of each player's side, used to collect captured stones
+  \item \textbf{Sowing}: The action of distributing stones from a selected pit around the board
+  \item \textbf{Capture}: When a stone lands in an empty pit on a player's side,
+    allowing the opponent's stones in the opposite pit to be captured
+  \item \textbf{Turn}: One player's opportunity to select and sow from a pit
+  \item \textbf{Game Room}: A virtual space containing exactly two players and one active game
+  \item \textbf{Room ID}: A unique identifier for a game room (e.g., ``1'', ``2'')
+  \item \textbf{Player ID}: A unique identifier for a player (UUID generated server-side)
+  \item \textbf{WebSocket Session}: A persistent bidirectional connection between client and server
+  \item \textbf{Disconnection}: Loss of WebSocket connection due to network failure or client action
+  \item \textbf{Reconnection}: Re-establishing a WebSocket connection after disconnection
+  \item \textbf{Forfeit}: Automatic win granted to opponent due to inactivity or disconnection timeout
 \end{itemize}
 
-\subsection{Relevant Distributed System Features}
-\label{ds-features}
+\subsection{Relevant Distributed System Features}\label{ds-features}
 
-Motivate which distributed system features are relevant for your project, and which are not.
-%
+\subsubsection{Transparency}
+
+\textbf{Relevance}: \textbf{PARTIAL}
+
+The system does NOT attempt to hide distribution from the user:
 \begin{itemize}
-  \item transparency
-  \begin{itemize}
-    \item does your system need to hide distribution details from users or developers?
-    \item is it important that failures, location, or replication are invisible?
-  \end{itemize}
-
-  \item fault tolerance, dependability -- availability, reliability, integrity, maintainability, safety
-  \begin{itemize}
-    \item what happens if a component fails? is uninterrupted service required?
-    \item is data loss or corruption unacceptable?
-    \item how quickly must the system recover from faults?
-  \end{itemize}
-
-  \item scalability
-  \begin{itemize}
-    \item will the system need to handle increasing numbers of users, requests, or data?
-    \item is it expected to grow over time?
-  \end{itemize}
-
-  \item security, trust
-  \begin{itemize}
-    \item is sensitive data being processed or stored?
-    \item are there multiple user roles with different permissions?
-    \item is authentication or authorization required?
-  \end{itemize}
-
-  \item resource sharing
-  \begin{itemize}
-    \item do multiple users or components need access to shared resources?
-    \item is coordination or synchronization needed?
-  \end{itemize}
-
-  \item openness, interoperability, heterogeneity of components
-  \begin{itemize}
-    \item Will your system interact with external systems or use components built with different technologies?
-    \item Is standardization or compatibility important?
-  \end{itemize}
-
-  \item evolvability, maintainability
-  \begin{itemize}
-    \item Will the system need to be updated or extended after deployment?
-    \item Is long-term maintenance a concern?
-  \end{itemize}
-
-  \item performance, concurrency, computation / communication efficiency, bandwidth
-  \begin{itemize}
-    \item Are there strict requirements on response time or throughput?
-    \item Will many operations happen in parallel?
-    \item Is network usage a concern?
-  \end{itemize}
-
-  \item economy, costs  
-  \begin{itemize}
-    \item Are there budget constraints for development, deployment, or operation?
-    \item Is minimizing resource usage important?
-  \end{itemize}
+  \item Users are aware they are playing over a network
+  \item If a player disconnects, the system explicitly notifies both players
+  \item Reconnection is a visible, user-initiated action
 \end{itemize}
+
+However, location transparency is achieved: users don't need to know the physical location of the server.
+
+\subsubsection{Fault Tolerance and Dependability}
+
+\textbf{Relevance}: \textbf{CRITICAL}
+
+This is a primary focus of the system:
+
+\begin{itemize}
+  \item \textbf{Availability}: The system remains available even if one player temporarily disconnects
+  \item \textbf{Reliability}: Games do not lose state due to network failures
+  \item \textbf{Integrity}: Game state cannot be corrupted by out-of-order messages or duplicate messages
+  \item \textbf{Graceful degradation}: System continues to function with one player disconnected,
+    waiting for reconnection
+\end{itemize}
+
+\textbf{Implementation mechanisms}:
+\begin{itemize}
+  \item Timeout and recovery behavior are summarized in the Design section and detailed in Fault-Tolerance
+  \item Synchronization and shared-state control are detailed in Design (Data and Consistency Issues)
+  \item Concrete implementation examples are provided in Implementation (Timeout Mechanisms)
+\end{itemize}
+
+
 
 \section{Design}\label{design}
 
-This chapter explains the strategies used to meet the requirements identified in the analysis. 
-%
-Ideally, the design should be the same, regardless of the technological choices made during the implementation phase.
-
-\begin{quote}
-You can re-arrange the sections as you prefer, but all the sections must be present in the end
-\end{quote}
-
-\noindent
-\textbf{Important:} try to motivate your design choices in relation to the requirements and features identified 
-in \cref{requirements} and \cref{ds-features}.
+This section describes how the requirements are met through architectural and design choices.
+The design is technology-agnostic and focuses on strategies rather than implementation details.
 
 \subsection{Architecture}\label{architecture}
 
+\subsubsection{Architectural Style}
+
+The system follows a \textbf{Client-Server Architecture with Event-Driven Communication}:
+
 \begin{itemize}
-  \item Which architectural style?
-  %
-  \begin{itemize}
-    \item why?
-  \end{itemize}
+  \item \textbf{Server-side}: Single authoritative game server maintains game state and enforces rules
+  \item \textbf{Client-side}: Thin clients (browsers) for input and display only
+  \item \textbf{Communication}: Asynchronous event-based (WebSocket) for real-time updates
 \end{itemize}
+
+
+\subsubsection{Conceptual Model}
+
+The system operates with the following main entities and their relationships:
+
+\begin{lstlisting}[language=java]
+GameRoom {
+  roomId: String
+  game: Game
+}
+
+Game {
+  player1: Player
+  player2: Player (nullable)
+  board: Board
+  gameStatus: GameStatus
+  disconnectedPlayerId: String (nullable)
+}
+
+Board {
+  pits: Pit[]  // 14 pits total
+}
+
+Player {
+  id: String  // UUID
+  name: String
+}
+
+Pit {
+  stones: int
+}
+\end{lstlisting}
+
+The game state transitions through the following status sequence:
+
+\begin{lstlisting}
+WAITING_FOR_PLAYER_2
+  -> (Player 2 joins)
+  -> PLAYER_1_TURN
+  <-> PLAYER_2_TURN
+  -> (or due to disconnect/inactivity)
+  -> PAUSED_FOR_RECONNECT
+  -> (reconnect success)
+  -> PLAYER_1_TURN or PLAYER_2_TURN
+  -> (or timeout expires)
+  -> PLAYER_DISCONNECTED
+  -> (game ends)
+  -> GAME_OVER
+\end{lstlisting}
 
 \subsection{Infrastructure}\label{infrastructure}
 
-\begin{itemize}
-  \item are there \emph{infrastructural components} that need to be introduced? \emph{how many}?
-  %
+\subsubsection{Components}
+
+The system comprises the following infrastructure components:
+
+\begin{enumerate}
+  \item \textbf{Web Server (Spring Boot)}:
   \begin{itemize}
-    \item e.g.~\emph{clients}, \emph{servers}, \emph{load balancers},
-    \emph{caches}, \emph{databases}, \emph{message brokers},
-    \emph{queues}, \emph{workers}, \emph{proxies}, \emph{firewalls},
-    \emph{CDNs}, \emph{etc.}
+    \item Handles HTTP requests for room creation and joining
+    \item Exposes WebSocket endpoint for game communication
+    \item Single instance per deployment
   \end{itemize}
 
-  \item how do components \emph{distribute} over the network? \emph{where}?
-  %
+  \item \textbf{WebSocket Broker}:
   \begin{itemize}
-    \item e.g.~do servers / brokers / databases / etc. sit on the same
-    machine? on the same network? on the same datacenter? on the same
-    continent?
+    \item Spring's simple message broker
+    \item Routes messages to subscribed clients
+    \item Built-in to Spring Boot; no external message queue required
   \end{itemize}
 
-  \item how do components \emph{find} each other?
-  %
+  \item \textbf{Web Browsers (Clients)}:
   \begin{itemize}
-    \item how to \emph{name} components?
-    \item e.g.~DNS, \emph{service discovery}, \emph{load balancing},
-    \emph{etc.}
+    \item Establish WebSocket connections to the server
+    \item Send game moves and receive state updates
+    \item Multiple browsers per game (exactly 2 players)
   \end{itemize}
-\end{itemize}
 
-\begin{quote}
-Component diagrams are welcome here
-\end{quote}
+  \item \textbf{In-Memory Store}:
+  \begin{itemize}
+    \item ConcurrentHashMap storing active game rooms
+    \item ConcurrentHashMap storing session-to-player mappings
+    \item No persistent database (games are ephemeral)
+  \end{itemize}
+\end{enumerate}
+
+
 
 \subsection{Modelling}\label{modelling}
 
+\subsubsection{Domain Entities}
+
+The system models four primary domain entities:
+
+\begin{enumerate}
+  \item \textbf{Game}: Represents a single game instance
+  \begin{itemize}
+    \item Encapsulates game rules and state transitions
+    \item Manages both players and the board
+    \item Determines winners and enforces turn order
+  \end{itemize}
+
+  \item \textbf{Board}: Represents the Mancala board
+  \begin{itemize}
+    \item 14 pits (6 per player + 1 store each)
+    \item Handles stone sowing, capturing, and scoring
+    \item Completely decoupled from players or game status
+  \end{itemize}
+
+  \item \textbf{Player}: Represents a player in the game
+  \begin{itemize}
+    \item Server-assigned UUID for identification
+    \item Player name provided by the user
+    \item No mutable state (purely identity)
+  \end{itemize}
+
+  \item \textbf{GameRoom}: Container for a game instance
+  \begin{itemize}
+    \item Groups a game with its room ID
+    \item Minimal business logic; mostly a data holder
+  \end{itemize}
+\end{enumerate}
+
+\subsubsection{Mapping Domain Entities to Infrastructure}
+
+\textbf{Where game state lives}:
+
 \begin{itemize}
-  \item which \textbf{domain entities} are there?
-  %
-  \begin{itemize}
-    \item e.g.~\emph{users}, \emph{products}, \emph{orders}, \emph{etc.}
-  \end{itemize}
-  
-  \item how do \emph{domain entities} \textbf{map to} \emph{infrastructural components}?
-  %
-  \begin{itemize}
-    \item e.g.~state of a video game on central server, while inputs/representations on clients
-    \item e.g.~where to store messages in an IM app? for how long?
-  \end{itemize}
-
-  \item which \textbf{domain events} are there?
-  %
-  \begin{itemize}
-    \item e.g.~\emph{user registered}, \emph{product added to cart}, \emph{order placed}, \emph{etc.}
-  \end{itemize}
-  
-  \item which sorts of \textbf{messages} are exchanged?
-  %
-  \begin{itemize}
-    \item e.g.~\emph{commands}, \emph{events}, \emph{queries}, \emph{etc.}
-  \end{itemize}
-
-  \item what information does the \textbf{state} of the system comprehend
-  %
-  \begin{itemize}
-    \item e.g.~\emph{users' data}, \emph{products' data}, \emph{orders' data}, \emph{etc.}
-  \end{itemize}
+  \item \textbf{Game state (Game, Board, Pits)}: Lives exclusively on the server in memory
+  \item \textbf{Player input (moves)}: Sent from client to server via WebSocket
+  \item \textbf{Game display state}: Lives on client in JavaScript variables (mirrors server)
+  \item \textbf{Session information}: Stored in server's SessionTracker
+  \item \textbf{Timing information}: Stored in server's activity/disconnection timestamp maps
 \end{itemize}
 
-\begin{quote}
-Class diagram are welcome here
-\end{quote}
+\textbf{Synchronization strategy}:
+
+The server is the single source of truth and clients act as renderers of server state.
+Detailed consistency guarantees are defined in \textbf{Consistency Model} to avoid repeating them here.
+
+\subsubsection{Domain Events}
+
+The system recognizes the following domain events:
+
+\begin{enumerate}
+  \item \textbf{RoomCreated}: Player 1 creates a new game room
+  \item \textbf{PlayerJoined}: Player 2 joins an existing room, game starts
+  \item \textbf{MoveMade}: A player selects a pit and makes a valid move
+  \item \textbf{TurnSwitched}: The turn automatically changes to the other player
+  \item \textbf{PlayerDisconnected}: A player's WebSocket connection is lost
+  \item \textbf{PlayerReconnected}: A disconnected player re-establishes connection
+  \item \textbf{ReconnectionTimeoutExpired}: Grace period for reconnection expires; opponent wins
+  \item \textbf{PlayerInactive}: A player makes no moves for the inactivity timeout duration
+  \item \textbf{GameEnded}: Game ends naturally (all pits on one side empty)
+  \item \textbf{RoomCleaned}: Room is removed from active rooms
+\end{enumerate}
+
+\subsubsection{Message Types}
+
+The system exchanges the following types of messages over WebSocket:
+
+\begin{enumerate}
+  \item \textbf{Commands} (Client -> Server):
+  \begin{itemize}
+    \item \texttt{/app/game.move}: Execute a move (pit index, room ID, player ID)
+    \item \texttt{/app/game.join}: Join a game (room ID, player ID)
+    \item \texttt{/app/game.reconnect}: Attempt to reconnect (room ID, player ID)
+  \end{itemize}
+
+  \item \textbf{Events} (Server -> Client, broadcast):
+  \begin{itemize}
+    \item \texttt{Game state update}: Broadcasted to \texttt{/topic/room/{roomId}}
+    \item Contains: Player names, pit states, current turn, game status, scores, winner, disconnection info
+  \end{itemize}
+
+  \item \textbf{Errors} (Server -> Client, point-to-point):
+  \begin{itemize}
+    \item \texttt{/queue/errors}: Invalid moves, room not found, invalid state errors
+  \end{itemize}
+\end{enumerate}
+
+
 
 \subsection{Interaction}\label{interaction}
 
-\begin{itemize}
-  \item how do components \emph{communicate}? \emph{when}? \emph{what}?
-  \item \emph{which} \textbf{interaction patterns} do they enact?
-\end{itemize}
+\subsubsection{Communication Patterns}
 
-\begin{quote}
-Sequence diagrams are welcome here
-\end{quote}
+The system employs two main communication patterns:
+
+\textbf{1. Request-Response (HTTP)}
+
+Used for game room creation and joining:
+
+\begin{lstlisting}
+Client                          Server
+  |                              |
+  +-> POST /api/rooms/create --->|
+  |                              |
+  |  (Create Player 1)           |
+  |  (Create GameRoom)           |
+  |  (Return room details)       |
+  |<--------- 200 OK ------------+
+  |  (room ID, player ID)        |
+  |                              |
+\end{lstlisting}
+
+\textbf{2. Event-Driven (WebSocket)}
+
+Used for game moves and state synchronization:
+
+\begin{lstlisting}
+Player 1                  Server              Player 2
+  |                       |                   |
+  +-> CONNECT /mancala-ws>|                   |
+  |<- CONNECTED ----------+                   |
+  |                       |                   |
+  +-> /app/game.move ---->| (Validate move)   |
+  |                       | (Update state)    |
+  |                       +-> /topic/room/1 ->| (Broadcast)
+  |<- Game state -----------------------------+|
+  |                       |                   |
+  | (Player 2's turn)     |                   |
+  |                       |<-- /app/game.move +
+  |                       | (Validate move)   |
+  |<- /topic/room/1 -------------------------+| (Broadcast)
+  |   (Game state)        |                   |
+  |                       |                   |
+\end{lstlisting}
+
+\subsubsection{Timeout Mechanism}
+
+\begin{lstlisting}
+Event: Player Disconnects
+|
++- Detect disconnect and pause game
++- Start reconnection grace timer
++- If player reconnects in time -> resume
++- Otherwise -> forfeit, cleanup, broadcast final state
+\end{lstlisting}
+
+Detailed timeout values and scheduler behavior are specified in Fault-Tolerance and Implementation.
 
 \subsection{Behaviour}\label{behaviour}
 
-\begin{itemize}
-  \item how does \emph{each} component \textbf{behave} individually (e.g.~in \emph{response} to \emph{events} or messages)?
-  \begin{itemize}
-    \item some components may be \emph{stateful}, others \emph{stateless}
-  \end{itemize}
+\subsubsection{Game State Machine}
 
-  \item which components are in charge of updating the \textbf{state} of the system? \emph{when}? \emph{how}?
+The game transitions through discrete states as follows:
+
+\textbf{State: WAITING\_FOR\_PLAYER\_2}
+\begin{itemize}
+  \item \textbf{Entry}: Player 1 creates a room
+  \item \textbf{Actions}: Server waits for Player 2 to join
+  \item \textbf{Transitions}:
+  \begin{itemize}
+    \item -> PLAYER\_1\_TURN when Player 2 joins
+  \end{itemize}
+  \item \textbf{Constraints}: Only Player 1 exists; no moves allowed
 \end{itemize}
 
-\begin{quote}
-State diagrams are welcome here
-\end{quote}
+\textbf{State: PLAYER\_1\_TURN}
+\begin{itemize}
+  \item \textbf{Entry}: Game starts or after Player 2's move
+  \item \textbf{Actions}: Player 1 can select a pit and move
+  \item \textbf{Transitions}:
+  \begin{itemize}
+    \item -> PLAYER\_1\_TURN if Player 1 lands in their store (extra turn)
+    \item -> PLAYER\_2\_TURN if Player 1's turn ends normally
+    \item -> PAUSED\_FOR\_RECONNECT if Player 1 disconnects
+    \item -> GAME\_OVER if game ends
+  \end{itemize}
+\end{itemize}
+
+\textbf{State: PLAYER\_2\_TURN}
+\begin{itemize}
+  \item \textbf{Entry}: After Player 1's turn ends (normal transition)
+  \item \textbf{Actions}: Player 2 can select a pit and move
+  \item \textbf{Transitions}: (Symmetric to PLAYER\_1\_TURN)
+\end{itemize}
+
+\textbf{State: PAUSED\_FOR\_RECONNECT}
+\begin{itemize}
+  \item \textbf{Entry}: A player's WebSocket disconnects during an active turn
+  \item \textbf{Actions}: Server remembers the previous state and waits for reconnection
+  \item \textbf{Transitions}:
+  \begin{itemize}
+    \item -> PLAYER\_1\_TURN or PLAYER\_2\_TURN if disconnected player reconnects (resume)
+    \item -> PLAYER\_DISCONNECTED if reconnection timeout expires
+  \end{itemize}
+  \item \textbf{Constraints}: No new moves allowed; waiting player cannot act
+\end{itemize}
+
+\textbf{State: PLAYER\_DISCONNECTED}
+\begin{itemize}
+  \item \textbf{Entry}: Reconnection timeout expires without player reconnecting
+  \item \textbf{Actions}: Game is forfeit; opponent automatically wins
+  \item \textbf{Transitions}:
+  \begin{itemize}
+    \item -> GAME\_OVER (final state)
+  \end{itemize}
+\end{itemize}
+
+\textbf{State: GAME\_OVER}
+\begin{itemize}
+  \item \textbf{Entry}: Game ends naturally (board empty on one side) or by forfeit
+  \item \textbf{Actions}: Calculate winner; return game to clients
+  \item \textbf{Transitions}: (Terminal state)
+  \item \textbf{Cleanup}: Room is removed after broadcast
+\end{itemize}
+
 
 \subsection{Data and Consistency Issues}\label{data-and-consistency-issues}
 
+\subsubsection{Data Storage}
+
+\textbf{What data is stored?}
+
 \begin{itemize}
-  \item Is there any data that needs to be stored?
-  %
-  \begin{itemize}
-    \item \emph{what} data? \emph{where}? \emph{why}?
-  \end{itemize}
-  
-  \item how should \emph{persistent data} be \textbf{stored}?
-  %
-  \begin{itemize}
-    \item e.g.~relations, documents, key-value, graph, etc.
-    \item why?
-  \end{itemize}
-  
-  \item Which components perform queries on the database?
-  %
-  \begin{itemize}
-    \item \emph{when}? \emph{which} queries? \emph{why}?
-    \item concurrent read? concurrent write? why?
-  \end{itemize}
-  
-  \item Is there any data that needs to be shared between components?
-  %
-  \begin{itemize}
-    \item \emph{why}? \emph{what} data?
-  \end{itemize}
+  \item Game state: Pit values, turn information, game status
+  \item Player information: Names, UUIDs
+  \item Room information: Room IDs, room -> game mappings
+  \item Session information: WebSocket session IDs -> player/room mappings
+  \item Temporal information: Activity timestamps, disconnection timestamps
+\end{itemize}
+
+\textbf{Where is it stored?}
+
+\begin{itemize}
+  \item All data in server's Java heap memory
+  \item Two primary structures: \texttt{activeRooms} (ConcurrentHashMap) and \texttt{sessionSessions} (ConcurrentHashMap)
+  \item No persistent storage (no database)
+\end{itemize}
+
+
+\subsubsection{Consistency Model}
+
+The system implements \textbf{Strong Consistency} for game state:
+
+\begin{itemize}
+  \item At any point in time, there is exactly one version of the game state
+  \item All moves are applied sequentially (never in parallel)
+  \item Before returning a move result, the new state is immediately broadcast to all clients
+  \item Clients do not make independent decisions; they always display server-truth
+\end{itemize}
+
+\textbf{Consistency guarantees}:
+
+\begin{itemize}
+  \item No lost updates: Each move is persisted in server memory immediately
+  \item No dirty reads: Clients only read state after server confirms
+  \item No race conditions: Synchronization prevents concurrent state modifications
+  \item Ordered updates: Messages are delivered in the order they were sent
+\end{itemize}
+
+\subsubsection{Query Operations}
+
+\textbf{Who queries the database?}
+
+Since there is no persistent database, we consider in-memory queries:
+
+\begin{itemize}
+  \item \textbf{RoomService}: Queries activeRooms map when retrieving/joining/removing rooms
+  \item \textbf{GameService}: Queries rooms when processing moves and timeouts
+  \item \textbf{SessionTracker}: Queries session mappings when tracking/removing sessions
+\end{itemize}
+
+\textbf{What queries?}
+
+\begin{itemize}
+  \item Get room by ID: O(1) hash lookup
+  \item Get all active rooms: O(n) iteration (rarely needed)
+  \item Check session membership: O(1) hash lookup
+\end{itemize}
+
+\textbf{When?}
+
+\begin{itemize}
+  \item On every move: ~1ms processing time
+  \item On disconnection event: Immediate
+  \item On timeout check: Every 5 seconds (scheduled)
+\end{itemize}
+
+\subsubsection{Shared State Management}
+
+The following data structures are shared between multiple components:
+
+\begin{itemize}
+  \item \textbf{GameRoom}: Shared between RoomService (creator), GameService (updater), WebSocketEventListener (accessor)
+  \item \textbf{Session mappings}: Shared between GameController (writer) and WebSocketEventListener (reader)
+  \item \textbf{Activity timestamps}: Shared between GameService (writer) and GameTimeoutScheduler (reader)
+\end{itemize}
+
+Thread safety is ensured through:
+
+\begin{itemize}
+  \item ConcurrentHashMap for all shared mutable collections
+  \item Synchronized blocks around complex multi-step operations
+  \item Immutable value objects (Player, Pit are largely immutable)
 \end{itemize}
 
 \subsection{Fault-Tolerance}\label{fault-tolerance}
 
+
+\subsubsection{Heartbeat and Timeout Mechanisms}
+
+\textbf{WebSocket-level heartbeat}:
+
 \begin{itemize}
-  \item Is there any form of data \textbf{replication} / federation / sharing?
-  %
-  \begin{itemize}
-    \item \emph{why}? \emph{how} does it work?
-  \end{itemize}
-  
-  \item Is there any \textbf{heart-beating}, \textbf{timeout}, \textbf{retry mechanism}?
-  %
-  \begin{itemize}
-    \item \emph{why}? \emph{among} which components? \emph{how} does it work?
-  \end{itemize}
-  
-  \item Is there any form of \textbf{error handling}?
-  %
-  \begin{itemize}
-    \item \emph{what} happens when a component fails? \emph{why}? \emph{how}?
-  \end{itemize}
+  \item SockJS (WebSocket fallback) provides automatic heartbeating
+  \item Server detects client disconnection within a few seconds
+  \item Triggered by network issues or client going offline
+\end{itemize}
+
+\textbf{Application-level timeouts}:
+
+\begin{enumerate}
+  \item \textbf{Reconnection grace period}: 30 seconds (resume if player returns; otherwise forfeit)
+  \item \textbf{Inactivity timeout}: 60 seconds (current player forfeits when idle beyond threshold)
+  \item \textbf{Scheduler check interval}: 5 seconds (periodically evaluates both timeout rules)
+\end{enumerate}
+
+\subsubsection{Error Handling}
+
+\textbf{Move validation errors}:
+
+\begin{lstlisting}
+Invalid pit index --> IllegalArgumentException
+  |
+GameController.@MessageExceptionHandler
+  |
+Send error to client via /queue/errors
+  |
+Client displays error message
+\end{lstlisting}
+
+\textbf{Game state errors}:
+
+\begin{itemize}
+  \item Move on wrong turn: Throw IllegalStateException
+  \item Move on game over: Throw IllegalStateException
+  \item Invalid player ID: Throw IllegalArgumentException
+\end{itemize}
+
+\textbf{Room not found errors}:
+
+\begin{itemize}
+  \item Room doesn't exist: Return HTTP 404
+  \item Room is full: Return HTTP 400
+  \item Proper error messages sent to client
+\end{itemize}
+
+\subsubsection{Recovery Strategy}
+
+\textbf{From temporary disconnection (< 30 seconds)}:
+
+\begin{itemize}
+  \item \textbf{Server-Side:} The server pauses the game state and waits for a STOMP reconnect payload containing the original Player ID.
+  \item \textbf{Client-Side Recovery:} The frontend utilizes both \texttt{localStorage} (to save the room and player IDs) and \texttt{sessionStorage} (to verify if the player was actively in a match within that specific tab). If a user accidentally refreshes the page, the JavaScript \texttt{window.onload} event intercepts the load, reads the \texttt{localStorage} payload, bypasses the lobby screen, and automatically fires an \texttt{/app/game.reconnect} message to the server to instantly resume the session.
+\end{itemize}
+
+\textbf{From permanent disconnection (> 30 seconds)}:
+
+\begin{itemize}
+  \item Opponent is declared winner
+  \item Room is cleaned up
+  \item Other player is notified
+  \item Disconnected player sees game over state if they reconnect late
 \end{itemize}
 
 \subsection{Availability}\label{availability}
 
-\begin{itemize}
-  \item Is there any \textbf{caching} mechanism?
-  %
-  \begin{itemize}
-    \item \emph{where}? \emph{why}?
-  \end{itemize}
-  
-  \item Is there any form of \textbf{load balancing}?
-  %
-  \begin{itemize}
-    \item \emph{where}? \emph{why}?
-  \end{itemize}
+\subsubsection{Caching}
 
-  \item In case of \textbf{network partitioning}, how does the system behave?
-  %
-  \begin{itemize}
-    \item \emph{why}? \emph{how}?
-  \end{itemize}
+\textbf{Client-side caching}:
+
+\begin{itemize}
+  \item Player ID and room ID stored in browser localStorage
+  \item Used to attempt reconnection to the same game
+  \item Reduces need to re-enter information after page refresh
 \end{itemize}
+
+\textbf{Server-side caching}:
+
+\begin{itemize}
+  \item No caching; all state is in-memory anyway
+  \item No database to cache query results
+\end{itemize}
+
+\subsubsection{Load Balancing}
+
+\textbf{Not implemented} for this project:
+
+\begin{itemize}
+  \item Single server instance handles all games
+  \item If many games run simultaneously, server CPU/memory could saturate
+  \item Production version would use load balancer to distribute across multiple servers
+\end{itemize}
+
+\subsubsection{Network Partitioning}
+
+\textbf{Scenario 1: Client-Server partition (client isolated)}
+
+\begin{itemize}
+  \item Client detects disconnection
+  \item Game pauses on server (PAUSED\_FOR\_RECONNECT)
+  \item Opponent continues to see paused game
+  \item If partition persists > 30 seconds, game forfeits to opponent
+  \item Client cannot send moves (isolated)
+\end{itemize}
+
+\textbf{Scenario 2: Client-Server partition (server isolated)}
+
+\begin{itemize}
+  \item Server detects both clients disconnected
+  \item Server cannot send broadcasts (no recipients)
+  \item All games timeout and are cleaned up
+  \item Inbound moves are dropped (no clients)
+\end{itemize}
+
+\textbf{Scenario 3: Slow network (high latency)}
+
+\begin{itemize}
+  \item Moves still processed correctly (all happens on server)
+  \item Broadcasts are delayed reaching clients
+  \item Game state will eventually converge (eventual consistency achieved)
+\end{itemize}
+
+The system favors \textbf{strong consistency} over availability: if there's any doubt about state,
+the server pauses the game rather than allowing conflicting moves.
 
 \subsection{Security}\label{security}
 
+
+\subsubsection{Input Validation}
+
+\textbf{Server-side validation} (strong):
+
 \begin{itemize}
-  \item Is there any form of \textbf{authentication}?
-  %
-  \begin{itemize}
-    \item \emph{where}? \emph{why}?
-  \end{itemize}
-
-  \item Is there any form of \textbf{authorization}?
-  %
-  \begin{itemize}
-    \item which sort of \emph{access control}?
-    \item which sorts of users / \emph{roles}? which \emph{access rights}?
-  \end{itemize}
-
-  \item Are \textbf{cryptographic schemas} being used?
-  %
-  \begin{itemize}
-    \item e.g.~token verification,
-    \item e.g.~data encryption, etc.
-  \end{itemize}
+  \item Player ID is validated on every move
+  \item Pit index is validated (must be 0-5 for P1, 7-12 for P2)
+  \item Move is validated against game rules
+  \item Game state is validated (only allow moves in playable states)
 \end{itemize}
+
+\textbf{Client-side validation} (weak):
+
+\begin{itemize}
+  \item The Vanilla JS actively disables click events and applies CSS \texttt{.disabled} and \texttt{.opponent-pit} classes to prevent players from clicking empty pits or opponent pits.
+  \item While not a strict security measure (as it can be bypassed via the browser console), this prevents accidental malformed payloads from reaching the server and provides immediate user experience constraints.
+\end{itemize}
+
+
 
 \section{Implementation}\label{implementation}
 
-Please report here all the implementation (technology-dependent) choices you made while implementing your design.
+This section describes the technology-dependent choices made to realize the design described above.
 
-\begin{quote}
-  If you run out of time for this project, you may consider leaving some aspect unimplemented, 
-  and simply discuss how you would have implemented them.
-  %
-  In this case, better would be to discuss unimplemented features in \cref{future-works}.
-\end{quote}
+\subsection{Network Protocols}
+
+\textbf{Protocol Choice: STOMP over WebSocket (with SockJS fallback)}
 
 \begin{itemize}
-  \item which \textbf{network protocols} to use?
-  %
-  \begin{itemize}
-    \item e.g.~UDP, TCP, HTTP, WebSockets, gRPC, XMPP, AMQP, MQTT, etc.
-  \end{itemize}
-  
-  \item how should \emph{in-transit data} be \textbf{represented}?
-  %
-  \begin{itemize}
-    \item e.g.~JSON, XML, YAML, Protocol Buffers, etc.
-  \end{itemize}
-  
-  \item how should \emph{databases} be \textbf{queried}?
-  %
-  \begin{itemize}
-    \item e.g.~SQL, NoSQL, etc.
-  \end{itemize}
-  
-  \item how should components be \emph{authenticated}?
-  %
-  \begin{itemize}
-    \item e.g.~OAuth, JWT, etc.
-  \end{itemize}
-
-  \item how should components be \emph{authorized}?
-  %
-  \begin{itemize}
-    \item e.g.~RBAC, ABAC, etc.
-  \end{itemize}
+  \item \textbf{HTTP REST}: Session setup (room create/join) via \texttt{/api/rooms/create} and \texttt{/api/rooms/join}
+  \item \textbf{WebSocket + STOMP}: Real-time gameplay events and state broadcasts with low latency
+  \item \textbf{SockJS}: Transport fallback for environments where native WebSocket is unavailable
 \end{itemize}
 
-\subsection{Technological details}\label{technological-details}
+
+\subsection{Data Representation}
+
+\textbf{In-transit data format: JSON}
+
+\begin{lstlisting}
+Example game state broadcast:
+
+{
+  "player1": {
+    "id": "550e8400-e29b-41d4-a716-446655440000",
+    "name": "Alice"
+  },
+  "player2": {
+    "id": "6ba7b810-9dad-11d1-80b4-00c04fd430c8",
+    "name": "Bob"
+  },
+  "board": {
+    "pits": [4, 4, 4, 4, 4, 4, 0, 4, 4, 4, 4, 4, 4, 0]
+  },
+  "gameStatus": "PLAYER_1_TURN",
+  "player1Score": 0,
+  "player2Score": 0,
+  "disconnectedPlayerId": null,
+  "winner": null
+}
+\end{lstlisting}
+
+
+\subsection{In-Memory Data Structures}
+
+\begin{lstlisting}[language=java]
+// Room storage
+ConcurrentHashMap<String, GameRoom> activeRooms
+
+// Session tracking
+ConcurrentHashMap<String, SessionInfo> sessions
+  where SessionInfo = (playerId, roomId)
+
+// Activity tracking
+ConcurrentHashMap<String, Instant> lastActivityTimestamps
+ConcurrentHashMap<String, Instant> disconnectTimestamps
+
+// Synchronization
+synchronized (room) { ... }
+\end{lstlisting}
+
+\textbf{Why ConcurrentHashMap?}
 
 \begin{itemize}
-  \item any particular \emph{framework} / \emph{technology} being exploited goes here
+  \item Thread-safe without locking entire map
+  \item Multiple readers can access simultaneously
+  \item Writers use fine-grained locks (lock striping)
+  \item Perfect for multiple concurrent games
 \end{itemize}
+
+\textbf{Why synchronized blocks?}
+
+\begin{itemize}
+  \item Ensure complex multi-step operations are atomic
+  \item Prevent inconsistent state during game transitions
+  \item Example: Move validation + board update + turn switch must be indivisible
+\end{itemize}
+
+\subsection{Timeout Mechanisms}
+
+This section contains implementation-level examples only. Policy definitions (values and rationale)
+are provided earlier in Design and Fault-Tolerance.
+
+\textbf{Reconnection timeout implementation example}
+
+\begin{lstlisting}[language=java]
+private static final Duration RECONNECT_GRACE = Duration.ofSeconds(30);
+
+// When player disconnects:
+disconnectTimestamps.put(roomId, Instant.now());
+
+// In scheduler (every 5 seconds):
+Duration elapsed = Duration.between(disconnectedAt, Instant.now());
+if (elapsed.compareTo(RECONNECT_GRACE) > 0) {
+  // Forfeit game
+  room.getGame().forfeit(disconnectedPlayerId);
+}
+\end{lstlisting}
+
+\textbf{Inactivity timeout implementation example}
+
+\begin{lstlisting}[language=java]
+private static final Duration INACTIVITY_TIMEOUT = Duration.ofMinutes(1);
+
+// When move is made:
+lastActivityTimestamps.put(roomId, Instant.now());
+
+// In scheduler (every 5 seconds):
+Duration inactive = Duration.between(lastMove, Instant.now());
+if (inactive.compareTo(INACTIVITY_TIMEOUT) > 0) {
+  // Current player is idle; they lose
+  String idlePlayer = (gameStatus == PLAYER_1_TURN)
+    ? player1.getId()
+    : player2.getId();
+  room.getGame().forfeit(idlePlayer);
+}
+\end{lstlisting}
+
+\textbf{Scheduler invocation implementation example}
+
+\begin{lstlisting}[language=java]
+@Scheduled(fixedRate = 5000)  // 5000 milliseconds
+public void checkTimeouts() {
+  List<GameRoom> timedOutRooms = gameService.processTimeouts();
+  for (GameRoom room : timedOutRooms) {
+    messagingTemplate.convertAndSend("/topic/room/" + room.getRoomId(), room.getGame());
+  }
+}
+\end{lstlisting}
+
+\subsection{Technological Details}\label{technological-details}
+
+\subsubsection{Spring Boot Framework}
+
+\textbf{Version}: 4.0.3
+
+\textbf{Key dependencies}:
+
+\begin{itemize}
+  \item \textbf{spring-boot-starter-webmvc}: Provides HTTP server and REST controllers
+  \item \textbf{spring-boot-starter-websocket}: Enables WebSocket + STOMP support
+  \item \textbf{spring-boot-starter-webmvc-test}: Testing framework
+  \item \textbf{lombok}: Reduces boilerplate (not heavily used in this project)
+\end{itemize}
+
+\subsection{Frontend Implementation (Client-Side)}
+
+The client-side interface was developed exclusively using HTML5, CSS3, and Vanilla JavaScript, completely avoiding heavy frameworks to ensure a lightweight, instantly loading application.
+
+\textbf{User Interface and Styling:}
+\begin{itemize}
+  \item \textbf{DOM Structure:} The HTML is divided into two primary views: the \texttt{lobby-screen} for room creation and the \texttt{game-screen} for the active board. The transition between these screens is handled dynamically via CSS classes.
+  \item \textbf{CSS Animations:} Visual cues are strictly enforced using CSS. For example, when it is a player's turn, their valid pits receive a \texttt{.active} class that triggers a custom \texttt{@keyframes pulse} animation, drawing the user's attention. Opponent pits are visually locked with a \texttt{.disabled} class and a restricted cursor.
+\end{itemize}
+
+\textbf{WebSocket Integration (app.js):}
+\begin{itemize}
+  \item \textbf{STOMP \& SockJS:} The client utilizes the SockJS library to establish the connection and the STOMP protocol to format the messages.
+  \item \textbf{Event Listeners:} The JavaScript attaches click event listeners to all \texttt{.pit} elements. When clicked, it extracts the pit index (e.g., parsing ``4'' from \texttt{pit-4}), verifies if it is locally the player's turn to prevent spam clicking, and sends a JSON payload to the server's \texttt{/app/game.move} endpoint.
+  \item \textbf{State Rendering:} Upon receiving a broadcast from \texttt{/topic/room/\{roomId\}}, the \texttt{updateBoard()} function iterates through the JSON state, updating the inner text of all 14 pits, checking the \texttt{gameStatus} to update the UI banners (e.g., switching to a ``Paused'' state), and enabling/disabling pit interactivity.
+\end{itemize}
+
 
 \section{Validation}\label{validation}
 
-\subsection{Automatic Testing}\label{automatic-testing}
+\subsubsection{Manual Testing (Performed)}
 
-\begin{itemize}
-  \item how were individual components \textbf{\emph{unit}-test}ed?
-  
-  \item how was communication, interaction, and/or integration among components tested?
-  
-  \item how to \textbf{\emph{end-to-end}-test} the system?
-  %
+The following manual testing was performed during development. Visual evidence of these tests can be seen in \cref{fig:manual-in-game,fig:manual-disconnection,fig:manual-disconnection-2,fig:manual-back-in-game,fig:manual-inactivity}.
+
+\begin{enumerate}
+  \item \textbf{Normal game flow}
   \begin{itemize}
-    \item e.g.~production vs.~test environment
+    \item Created room
+    \item Joined room from second browser
+    \item Played complete game
+    \item Verified winner determination
+    \item \textbf{Result}: PASS
   \end{itemize}
 
-  \item for each test specify:
-  %
+  \item \textbf{Disconnection and reconnection}
   \begin{itemize}
-    \item rationale of individual tests
-    \item how were the test automated
-    \item how to run them
-    \item which requirement they are testing, if any
+    \item Simulated disconnection by blocking network (DevTools)
+    \item Waited < 30 seconds
+    \item Reconnected
+    \item Game resumed correctly
+    \item \textbf{Result}: PASS
   \end{itemize}
-\end{itemize}
 
-\begin{quote}
-recall that \emph{deployment} \textbf{automation} is commonly used to \emph{test} the system in \emph{production-like} environment
-\end{quote}
-
-\begin{quote}
-recall to test corner cases (crashes, errors, etc.)
-\end{quote}
-
-\subsection{Acceptance test}\label{acceptance-test}
-
-\begin{itemize}
-  \item did you perform any \emph{manual} testing?
-  %
+  \item \textbf{Reconnection timeout}
   \begin{itemize}
-    \item what did you test?
-    \item why wasn't it automatic?
+    \item Simulated disconnection
+    \item Waited > 30 seconds
+    \item Opponent was declared winner
+    \item \textbf{Result}: PASS
   \end{itemize}
-\end{itemize}
+
+  \item \textbf{Inactivity timeout}
+  \begin{itemize}
+    \item Set inactivity timeout to 60 seconds (for testing)
+    \item Played moves until active player stopped moving
+    \item Waited > 60 seconds
+    \item Inactive player was forfeit
+    \item \textbf{Result}: PASS
+  \end{itemize}
+
+\end{enumerate}
+
+\textbf{Manual testing screenshots:}
+
+\begin{figure}
+  \centering
+  \includegraphics[width=0.85\textwidth]{\detokenize{figures/inside the game.png}}
+  \caption{Manual test evidence: normal in-game state after both players join.}
+  \label{fig:manual-in-game}
+\end{figure}
+
+\begin{figure}
+  \centering
+  \includegraphics[width=0.85\textwidth]{\detokenize{figures/disconnection.png}}
+  \caption{Manual test evidence: disconnection detected and reconnect wait state shown.}
+  \label{fig:manual-disconnection}
+\end{figure}
+
+\begin{figure}
+  \centering
+  \includegraphics[width=0.85\textwidth]{\detokenize{figures/disconnection-2.png}}
+  \caption{Manual test evidence: reconnection timeout progression.}
+  \label{fig:manual-disconnection-2}
+\end{figure}
+
+\begin{figure}
+  \centering
+  \includegraphics[width=0.85\textwidth]{\detokenize{figures/back in game.png}}
+  \caption{Manual test evidence: successful recovery after reconnection.}
+  \label{fig:manual-back-in-game}
+\end{figure}
+
+\begin{figure}
+  \centering
+  \includegraphics[width=0.85\textwidth]{\detokenize{figures/inactivity.png}}
+  \caption{Manual test evidence: inactivity timeout and automatic forfeit outcome.}
+  \label{fig:manual-inactivity}
+\end{figure}
+
 
 \section{Deployment}\label{deployment}
 
-\begin{itemize}
-  \item should one install your software from scratch, how to do it?
-  %
-  \begin{itemize}
-    \item provide instructions
-    \item provide expected outcomes
-  \end{itemize}
+\subsection{Installation Instructions}
 
-  \item what software should be installed on the machines to run your project? which versions?
-  
-  \item should one set environment variables or configuration files?
-  
-  \item if you're using containerization (e.g.~Docker), 
-  describe how you engineered your deployment scrips (e.g. \texttt{docker-compose.yml} files)
+\subsubsection{Prerequisites}
+
+\begin{itemize}
+  \item Java 17 or later installed
+  \item Maven 3.6+ installed
+  \item Git (to clone repository)
+  \item Modern web browser (Chrome, Firefox, Safari, Edge)
 \end{itemize}
+
+\subsubsection{Build and Run}
+
+\begin{lstlisting}[language=bash]
+# 1. Clone the repository
+git clone <repository-url>
+cd mancala-game-springboot
+
+# 2. Build the project
+mvn clean package
+
+# 3. Run the application
+mvn spring-boot:run
+
+
+# 4. Access in browser
+# Navigate to http://localhost:8080
+\end{lstlisting}
+
+
 
 \section{User Guide}\label{user-guide}
 
+\subsection{Starting the Application}
+
+\begin{enumerate}
+  \item Open terminal/command prompt
+  \item Navigate to project directory
+  \item Run: \texttt{mvn spring-boot:run}
+  \item Wait for startup message: ``Started MancalaGameSpringbootApplication in X seconds''
+  \item Open browser to \texttt{http://localhost:8080}
+\end{enumerate}
+
+\subsection{Creating a Game}
+
+\begin{enumerate}
+  \item On the home page, enter your player name
+  \item Click ``Create Room''
+  \item A room ID will be displayed (e.g., ``1'')
+  \item Share this room ID with your opponent (via chat, email, etc.)
+  \item Game waits with message ``Waiting for Player 2''
+\end{enumerate}
+
+\subsection{Joining a Game}
+
+\begin{enumerate}
+  \item Obtain room ID from Player 1
+  \item Open browser to \texttt{http://localhost:8080}
+  \item Enter your player name
+  \item Enter the room ID
+  \item Click ``Join Room''
+  \item Game board appears; Player 1 makes first move
+\end{enumerate}
+
+\subsection{Playing the Game}
+
 \begin{itemize}
-  \item how to use your software?
-  %
+  \item Click any pit on your side to select and sow stones
+  \item The system enforces all Mancala rules:
   \begin{itemize}
-    \item provide instructions
-    \item provide expected outcomes
-    \item provide screenshots if possible
+    \item Stones are distributed around the board
+    \item Captures occur when landing in empty pits
+    \item Extra turns granted when landing in your store
+    \item Game ends when one side is empty
   \end{itemize}
+  \item Game status is displayed at top (whose turn)
+  \item Scores update in real-time
+  \item Winner is announced when game ends
 \end{itemize}
+
+\subsection{Handling Disconnection}
+
+\begin{itemize}
+  \item If your connection is lost, game pauses
+  \item Message appears: ``Opponent disconnected''
+  \item You have 30 seconds to reconnect before opponent wins automatically
+  \item To reconnect: Refresh page; system detects and resumes game
+  \item If reconnection fails within 30 seconds, game is forfeited
+\end{itemize}
+
+\subsection{Rules Reminder}
+
+\textbf{How Mancala is played}:
+
+\begin{enumerate}
+  \item Players alternate turns
+  \item On your turn, select a pit on your side
+  \item Stones are distributed counter-clockwise
+  \item Stones are skipped in opponent's store
+  \item If last stone lands in your store, you get another turn
+  \item If last stone lands in an empty pit on your side, capture opposite pit
+  \item Game ends when one side is completely empty
+  \item Winner is player with most stones in their store
+\end{enumerate}
 
 \section{Self-evaluation}\label{self-evaluation}
 
+\subsection{Kasra Sabertehrani}
+
+\textbf{Role within the group:}
+As the backend developer, my primary responsibility was engineering the authoritative server and managing the distributed state. I designed the Spring Boot architecture, implemented the STOMP WebSocket message broker, and wrote the core Mancala game engine. I specifically focused on solving concurrency challenges by designing thread-safe operations using \texttt{ConcurrentHashMap} and synchronized blocks to ensure state consistency during simultaneous network requests. Additionally, I implemented the \texttt{SessionTracker} and the scheduled timeout mechanisms to handle silent TCP connection drops.
+
+\textbf{Product Strengths (Backend Perspective):}
 \begin{itemize}
-  \item An individual section is required for each member of the group
-  \item Each member must self-evaluate their work, listing the strengths and weaknesses of the product
-  \item Each member must describe their role within the group as objectively as possible.
+  \item \textbf{Reliable Real-Time Sync}: The WebSocket broadcasting infrastructure successfully keeps both players aligned with sub-second latency.
+  \item \textbf{Safe Concurrency}: The explicit thread locking prevents race conditions, successfully supporting multiple simultaneous game rooms without cross-room interference.
+  \item \textbf{Robust Session Handling}: Disconnection/reconnection and timeout paths are explicitly modeled, preventing the server from holding onto dead connections indefinitely.
 \end{itemize}
 
-It should be noted that each student is only responsible for their own section.
+\textbf{Product Weaknesses (Backend Perspective):}
+\begin{itemize}
+  \item \textbf{Ephemeral State}: No persistent database is utilized; all active games and player sessions are lost if the Spring Boot server restarts.
+  \item \textbf{Single Server Deployment}: The architecture lacks horizontal scaling. If the single node crashes, there is no failover mechanism.
+  \item \textbf{Security}: Communication is unencrypted (no HTTPS/WSS) and lacks a formal authentication protocol.
+\end{itemize}
+
+\subsection{Parisa Sokuti}
+
+\textbf{Role within the group:}
+As the frontend developer, my role focused on building the client-side architecture and user interface using HTML, CSS, and Vanilla JavaScript. I was responsible for integrating the SockJS and STOMP client libraries to establish the persistent connection with the server. I engineered the logic to parse incoming JSON state broadcasts and dynamically manipulate the DOM to render the Mancala board, update scores, and provide real-time visual feedback for game events, including network state changes (e.g., displaying "Paused" screens when the opponent disconnects).
+
+\textbf{Product Strengths (Frontend Perspective):}
+\begin{itemize}
+  \item \textbf{Lightweight Client}: By utilizing Vanilla JS rather than a heavy framework like React or Angular, the client application loads instantly and minimizes unnecessary overhead.
+  \item \textbf{Responsive Feedback}: The UI reacts strictly to server-driven events, ensuring the player's view is always perfectly synchronized with the authoritative state.
+  \item \textbf{Graceful Degradation}: The interface clearly communicates network issues to the user, masking the complexity of the distributed system behind user-friendly countdowns and pause screens.
+\end{itemize}
+
+\textbf{Product Weaknesses (Frontend Perspective):}
+\begin{itemize}
+  \item \textbf{DOM Manipulation Complexity}: Direct DOM manipulation in Vanilla JS becomes increasingly difficult to maintain as the application's complexity grows compared to a component-based framework.
+  \item \textbf{Client-Side Caching}: If a player refreshes the page manually, the UI completely resets until the server pushes the next full state broadcast, causing a momentary flash of unstyled or empty content.
+  \item \textbf{Basic Styling}: The interface is functional but lacks advanced graphical polish, animations, or responsive mobile optimizations.
+\end{itemize}
+
+
 
 \section{Future works}\label{future-works}
 
-Discuss possible future works, improvements, extensions, optimizations, etc.
 
-Also discuss here any unimplemented feature, and how you would have implemented it.
+\begin{enumerate}
+  \item \textbf{Spectator Mode}: Allow additional players to watch games without participating
 
-\bibliographystyle{plain}
-\bibliography{references}
+  \item \textbf{Undo/Replay}: Allow players to undo recent moves or replay games
+
+  \item \textbf{AI Opponent}: Implement an AI player for single-player mode
+
+  \item \textbf{Game Variants}: Support different Mancala variants (different board sizes, rules)
+
+  \item \textbf{Chat Feature}: Allow players to communicate during games
+
+  \item \textbf{Rating System}: Track player ratings, history, statistics
+
+  \item \textbf{Tournament Mode}: Support bracketed tournaments with multiple games
+\end{enumerate}
+
 
 \end{document}
+
